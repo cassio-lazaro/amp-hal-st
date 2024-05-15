@@ -28,7 +28,7 @@ int main()
 #if defined(STM32F7)
     static hal::GpioPinStm stLinkUartTxPin{ hal::Port::D, 8 };
     static hal::GpioPinStm stLinkUartRxPin{ hal::Port::D, 9 };
-    static hal::DmaStm::TransmitStream transmitStream{ dmaStm, hal::DmaChannelId{ 1, 3, 4} };
+    static hal::DmaStm::TransmitStream transmitStream{ dmaStm, hal::DmaChannelId{ 1, 3, 4 } };
     static hal::UartStmDma stLinkUartDma{ transmitStream, 3, stLinkUartTxPin, stLinkUartRxPin };
 
 #elif defined(STM32G0) || defined(STM32G4)

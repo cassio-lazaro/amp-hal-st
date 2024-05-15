@@ -20,7 +20,6 @@ int main()
 
     static main_::StmEventInfrastructure eventInfrastructure;
 
-
     static main_::NUCLEO ui;
     static services::DebugLed debugLed(ui.ledGreen);
 
@@ -31,11 +30,18 @@ int main()
     ledBlue.Set(false);
 
     ui.buttonOne.Config(hal::PinConfigType::input);
-    ui.buttonTwo.EnableInterrupt([&ledRed](){ ledRed.GetOutputLatch() == true ? ledRed.Set(false) : ledRed.Set(true);}, hal::InterruptTrigger::fallingEdge);
+    ui.buttonTwo.EnableInterrupt([&ledRed]()
+        {
+            ledRed.GetOutputLatch() == true ? ledRed.Set(false) : ledRed.Set(true);
+        },
+        hal::InterruptTrigger::fallingEdge);
 
-    
     ui.buttonTwo.Config(hal::PinConfigType::input);
-    ui.buttonOne.EnableInterrupt([&ledBlue](){ ledBlue.GetOutputLatch() == true ? ledBlue.Set(false) : ledBlue.Set(true);}, hal::InterruptTrigger::risingEdge);
+    ui.buttonOne.EnableInterrupt([&ledBlue]()
+        {
+            ledBlue.GetOutputLatch() == true ? ledBlue.Set(false) : ledBlue.Set(true);
+        },
+        hal::InterruptTrigger::risingEdge);
 #endif
 
     eventInfrastructure.Run();
