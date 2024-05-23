@@ -1,3 +1,5 @@
+#include "infra/util/MemoryRange.hpp"
+#include DEVICE_HEADER
 #include "hal_st/stm32fxxx/UartStmDuplexDma.hpp"
 #include "generated/stm32fxxx/PeripheralTable.hpp"
 #include "infra/event/EventDispatcher.hpp"
@@ -6,7 +8,7 @@ namespace hal
 {
     namespace
     {
-        uint32_t defaultRxTimeout = 16;
+        uint32_t defaultRxTimeout = 64;
 
         volatile void* TransmitRegister(uint8_t uartIndex)
         {
@@ -58,7 +60,6 @@ namespace hal
         RegisterInterrupt(config);
         EnableClockUart(uartIndex);
 
-        UART_HandleTypeDef uartHandle = {};
         uartHandle.Instance = peripheralUart[uartIndex];
         uartHandle.Init.BaudRate = config.baudrate;
         uartHandle.Init.WordLength = USART_WORDLENGTH_8B;
@@ -119,12 +120,19 @@ namespace hal
     void UartStmDuplexDma::ReceiveData(infra::Function<void(infra::ConstByteRange data)> dataReceived)
     {
         this->dataReceived = dataReceived;
-
-        receiveDmaChannel.StartReceive(rxBuffer);
-
+        
         peripheralUart[uartIndex]->CR2 |= USART_CR2_RTOEN;
         peripheralUart[uartIndex]->CR1 |= USART_CR1_RE | USART_CR1_RTOIE;
         peripheralUart[uartIndex]->RTOR = defaultRxTimeout;
+
+        receiveDmaChannel.StartReceive(&rxBuffer, [this](DMA_HandleTypeDef *dma, infra::ByteRange *data, DMA_QListTypeDef *dmaQueue){ 
+            uartHandle.hdmarx = dma;
+            dma->Parent = &uartHandle;
+            
+            really_assert(HAL_DMAEx_List_SetCircularMode(dmaQueue) == 0);
+            really_assert(HAL_DMAEx_List_LinkQ(dma, dmaQueue) == 0);
+
+            HAL_UART_Receive_DMA(&uartHandle, data->begin(), data->size());});
     }
 
     void UartStmDuplexDma::HalfReceiveComplete()

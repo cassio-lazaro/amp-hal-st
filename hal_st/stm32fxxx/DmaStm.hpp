@@ -108,6 +108,7 @@ namespace hal
 
             DmaStm& dma;
             uint8_t dmaIndex;
+            DMA_HandleTypeDef DmaChannelHandle;
 #ifdef DMA_CTR2_REQSEL
             uint8_t dmaMux;
 #endif
@@ -182,6 +183,7 @@ namespace hal
             CircularStreamInterruptHandler(Stream& stream, const infra::Function<void()>& transferHalfComplete, const infra::Function<void()>& transferFullComplete);
 
             bool IsInterruptPending() const;
+            DMA_HandleTypeDef *Dma() { return &stream.DmaChannelHandle; }
 
         private:
             void OnInterrupt();
@@ -211,6 +213,7 @@ namespace hal
             void StartReceiveDummy(uint16_t size, uint8_t dataSize = 1);
 
             size_t ReceivedSize() const;
+            DMA_HandleTypeDef *Dma() { return &stream.DmaChannelHandle; }
 
         private:
             TransceiveStream& stream;
@@ -331,6 +334,7 @@ namespace hal
         CircularTransceiverDmaChannel(DmaStm::TransceiveStream& stream, volatile void* peripheralAddress, uint8_t peripheralTransferSize, const infra::Function<void()>& transferHalfComplete, const infra::Function<void()>& transferFullComplete);
 
         bool IsInterruptPending() const;
+        DMA_HandleTypeDef *Dma() { return circularStreamInterruptHandler.Dma(); };
 
     private:
         DmaStm::CircularStreamInterruptHandler circularStreamInterruptHandler;
@@ -367,6 +371,7 @@ namespace hal
         using CircularTransceiverDmaChannel::StartTransmitDummy;
 
         using CircularTransceiverDmaChannel::StartReceive;
+        // void StartReceive(infra::ByteRange *data, const infra::Function<void(DMA_HandleTypeDef *dma, infra::ByteRange *data, DMA_QListTypeDef *dmaQueue)>&receive);
         using CircularTransceiverDmaChannel::StartReceiveDummy;
 
         using CircularTransceiverDmaChannel::ReceivedSize;

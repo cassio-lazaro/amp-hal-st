@@ -1,3 +1,4 @@
+// #include "build/stm32f407/_deps/emil-src/infra/util/ByteRange.hpp"
 #include "hal/interfaces/Gpio.hpp"
 #include "hal_st/instantiations/NucleoUi.hpp"
 #include "hal_st/instantiations/StmEventInfrastructure.hpp"
@@ -7,6 +8,10 @@
 #include "services/tracer/Tracer.hpp"
 #include "services/tracer/TracerWithDateTime.hpp"
 #include "services/util/DebugLed.hpp"
+#include "hal_st/stm32fxxx/UartStm.hpp"
+#include "hal_st/stm32fxxx/UartStmDuplexDma.hpp"
+#include "hal/interfaces/SerialCommunication.hpp"
+// #include "infra/util/BoundedString.hpp"
 #include <array>
 #include <chrono>
 
@@ -48,10 +53,14 @@ int main()
     static hal::GpioPinStm stLinkUartRxPin{ hal::Port::A, 8 };
 
     static hal::DmaStm::TransmitStream transmitStream{ dmaStm, hal::DmaChannelId{ 1, 1, GPDMA1_REQUEST_USART1_TX } };
-    static hal::UartStmDma stLinkUartDma{ transmitStream, 1, stLinkUartTxPin, stLinkUartRxPin };
+    static hal::DmaStm::ReceiveStream receiveStream{ dmaStm, hal::DmaChannelId{ 1, 7, GPDMA1_REQUEST_USART1_RX } };
+    // static hal::UartStmDma stLinkUartDma{ transmitStream, 1, stLinkUartTxPin, stLinkUartRxPin };
+    static hal::UartStmDuplexDma::WithRxBuffer<64> uartDuplexDma{ transmitStream, receiveStream, 1, stLinkUartTxPin, stLinkUartRxPin };
+
 #endif
 
-    static services::StreamWriterOnSerialCommunication::WithStorage<64> streamWriterOnSerialCommunication{ stLinkUartDma };
+    // static services::StreamWriterOnSerialCommunication::WithStorage<64> streamWriterOnSerialCommunication{ stLinkUartDma };
+    static services::StreamWriterOnSerialCommunication::WithStorage<1024> streamWriterOnSerialCommunication{ uartDuplexDma };
 
     static infra::TextOutputStream::WithErrorPolicy textOutputStream{ streamWriterOnSerialCommunication };
     static services::TracerWithDateTime tracerWithDateTime{ textOutputStream };
@@ -62,6 +71,8 @@ int main()
         {
             services::GlobalTracer().Trace() << "Hello World !";
         } };
+
+    uartDuplexDma.ReceiveData([](infra::ConstByteRange data){ services::GlobalTracer().Trace() << "Received: " << infra::ByteRangeAsString(data); });
 
     eventInfrastructure.Run();
     __builtin_unreachable();

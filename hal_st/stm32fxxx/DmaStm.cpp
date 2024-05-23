@@ -1,5 +1,7 @@
 #include "hal_st/stm32fxxx/DmaStm.hpp"
 #include "infra/util/ByteRange.hpp"
+#include "stm32wbaxx_hal_dma.h"
+#include <functional>
 
 #if !defined(STM32F0) && !defined(STM32F1) && !defined(STM32F3)
 
@@ -400,27 +402,29 @@ namespace hal
 #endif
     {
         dma.ReserveStream(dmaIndex, streamIndex);
-
         DMA_HandleTypeDef DmaChannelHandle = {};
 
+#if defined(DMA_LINKEDLIST)
+        DMA_QListTypeDef dmaQueue;
+        DMA_NodeConfTypeDef pNodeConfig;
+        DMA_NodeTypeDef nodeTx;
+        DmaChannelHandle.Instance = DmaChannel[dmaIndex][streamIndex];
+        DmaChannelHandle.InitLinkedList.Priority = DMA_LOW_PRIORITY_MID_WEIGHT;
+        DmaChannelHandle.InitLinkedList.LinkStepMode = DMA_LSM_FULL_EXECUTION;
+        DmaChannelHandle.InitLinkedList.LinkAllocatedPort = DMA_LINK_ALLOCATED_PORT0;
+        DmaChannelHandle.InitLinkedList.TransferEventMode = DMA_TCEM_LAST_LL_ITEM_TRANSFER;
+        DmaChannelHandle.InitLinkedList.LinkedListMode = DMA_LINKEDLIST_CIRCULAR;
+        really_assert(HAL_DMAEx_List_Init(&DmaChannelHandle) == 0);
+        really_assert(HAL_DMA_ConfigChannelAttributes(&DmaChannelHandle, DMA_CHANNEL_NPRIV) == 0);
+#else
         DmaChannelHandle.Instance = DmaChannel[dmaIndex][streamIndex];
 
         DmaChannelHandle.Init.Direction = DMA_MEMORY_TO_PERIPH;
-        DmaChannelHandle.Init.Mode = DMA_NORMAL;
-
-#if defined(GPDMA1)
-        DmaChannelHandle.Init.BlkHWRequest = DMA_BREQ_SINGLE_BURST;
-        DmaChannelHandle.Init.Priority = DMA_LOW_PRIORITY_MID_WEIGHT;
-        DmaChannelHandle.Init.SrcBurstLength = 1;
-        DmaChannelHandle.Init.DestBurstLength = 1;
-        DmaChannelHandle.Init.TransferAllocatedPort = DMA_SRC_ALLOCATED_PORT0 | DMA_DEST_ALLOCATED_PORT0;
-        DmaChannelHandle.Init.TransferEventMode = DMA_TCEM_BLOCK_TRANSFER;
-#else
         DmaChannelHandle.Init.PeriphInc = DMA_PINC_DISABLE;
         DmaChannelHandle.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
         DmaChannelHandle.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
+        DmaChannelHandle.Init.Mode = DMA_NORMAL;
         DmaChannelHandle.Init.Priority = DMA_PRIORITY_MEDIUM;
-#endif
 #if defined(DMA_STREAM_BASED)
         DmaChannelHandle.Init.Channel = dmaChannel[channelId.channel];
         DmaChannelHandle.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
@@ -430,8 +434,8 @@ namespace hal
 #else
         DmaChannelHandle.Init.Request = channelId.mux;
 #endif
-
         HAL_DMA_Init(&DmaChannelHandle);
+#endif
     }
 
     DmaStm::Stream::~Stream()
@@ -628,6 +632,44 @@ namespace hal
 #if defined(DMA_SxCR_CIRC)
         streamRegister->CR |= DMA_SxCR_CIRC;
 #elif defined(DMA_LINKEDLIST)
+        /* Set node configuration ################################################*/
+        // DmaChannelHandle.Instance = DmaChannel[dmaIndex][streamIndex];
+        // DmaChannelHandle.InitLinkedList.Priority = DMA_LOW_PRIORITY_LOW_WEIGHT;
+        // DmaChannelHandle.InitLinkedList.LinkStepMode = DMA_LSM_FULL_EXECUTION;
+        // DmaChannelHandle.InitLinkedList.LinkAllocatedPort = DMA_LINK_ALLOCATED_PORT0;
+        // DmaChannelHandle.InitLinkedList.TransferEventMode = DMA_TCEM_LAST_LL_ITEM_TRANSFER;
+        // DmaChannelHandle.InitLinkedList.LinkedListMode = DMA_LINKEDLIST_CIRCULAR;
+        // really_assert(HAL_DMAEx_List_Init(&DmaChannelHandle) == 0);
+        // really_assert(HAL_DMA_ConfigChannelAttributes(&DmaChannelHandle, DMA_CHANNEL_NPRIV) == 0);
+
+        
+        pNodeConfig.NodeType = DMA_GPDMA_LINEAR_NODE;
+        pNodeConfig.Init.Request = GPDMA1_REQUEST_USART1_RX;
+        pNodeConfig.Init.BlkHWRequest = DMA_BREQ_SINGLE_BURST;
+        pNodeConfig.Init.Direction = DMA_PERIPH_TO_MEMORY;
+        pNodeConfig.Init.SrcInc = DMA_SINC_FIXED;
+        pNodeConfig.Init.DestInc = DMA_DINC_INCREMENTED;
+        pNodeConfig.Init.SrcDataWidth = DMA_SRC_DATAWIDTH_BYTE;
+        pNodeConfig.Init.DestDataWidth = DMA_DEST_DATAWIDTH_BYTE;
+        pNodeConfig.Init.SrcBurstLength = 1;
+        pNodeConfig.Init.DestBurstLength = 1;
+        pNodeConfig.Init.TransferAllocatedPort = DMA_SRC_ALLOCATED_PORT0|DMA_DEST_ALLOCATED_PORT0;
+        pNodeConfig.Init.TransferEventMode = DMA_TCEM_BLOCK_TRANSFER;
+        pNodeConfig.TriggerConfig.TriggerPolarity = DMA_TRIG_POLARITY_MASKED;
+        pNodeConfig.DataHandlingConfig.DataExchange = DMA_EXCHANGE_NONE;
+        pNodeConfig.DataHandlingConfig.DataAlignment = DMA_DATA_RIGHTALIGN_ZEROPADDED;
+
+        /* Build nodeTx Node */
+        really_assert(HAL_DMAEx_List_BuildNode(&pNodeConfig, &nodeTx) == 0);
+
+        /* Insert nodeTx to Queue */
+        really_assert(HAL_DMAEx_List_InsertNode_Tail(&dmaQueue, &nodeTx) == 0);
+
+        really_assert(HAL_DMAEx_List_SetCircularModeConfig(&dmaQueue, &nodeTx) == 0);
+
+        // really_assert(HAL_DMAEx_List_SetCircularMode(&dmaQueue) == 0);
+        
+        // really_assert(HAL_DMAEx_List_LinkQ(&DmaChannelHandle, &dmaQueue) == 0);
 #else
         streamRegister->CCR |= DMA_CCR_CIRC;
 #endif
@@ -665,7 +707,7 @@ namespace hal
 #if defined(DMA_SxCR_DIR_0)
         streamRegister->CR |= DMA_MEMORY_TO_PERIPH;
 #elif defined(STM32WBA)
-        streamRegister->CTR2 |= DMA_CTR2_DREQ;
+        streamRegister->CTR2 |= DMA_CTR2_DREQ | (dmaMux & DMA_CTR2_REQSEL);
         streamRegister->CTR2 &= ~DMA_CTR2_SWREQ;
 #else
         streamRegister->CCR |= DMA_MEMORY_TO_PERIPH;
@@ -765,12 +807,13 @@ namespace hal
     void DmaStm::TransceiveStream::StartReceive(infra::ByteRange data)
     {
         this->data = data;
-
+#if not defined(DMA_LINKEDLIST)
         SetPeripheralToMemoryMode();
         EnableMemoryIncrement();
         SetTransferSize(data.size());
         SetMemoryAddress(data.begin());
         Enable();
+#endif
     }
 
     void DmaStm::TransceiveStream::StartReceiveDummy(uint16_t size)
@@ -950,6 +993,12 @@ namespace hal
     CircularReceiveDmaChannel::CircularReceiveDmaChannel(DmaStm::ReceiveStream& stream, volatile void* peripheralAddress, uint8_t peripheralTransferSize, const infra::Function<void()>& transferHalfComplete, const infra::Function<void()>& transferFullComplete)
         : CircularTransceiverDmaChannel{ stream, peripheralAddress, peripheralTransferSize, transferHalfComplete, transferFullComplete }
     {}
+
+//     void CircularReceiveDmaChannel::StartReceive(infra::ByteRange *data, const infra::Function<void(DMA_HandleTypeDef *dma, infra::ByteRange *data, DMA_QListTypeDef *dmaQueue)>&receive)
+//     {
+//         CircularTransceiverDmaChannel::StartReceive(*data);
+//         receive(Dma(), data, &dmaQueue);
+//     } todo(crlazaro) Remove it
 }
 
 #endif

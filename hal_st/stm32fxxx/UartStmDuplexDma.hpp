@@ -73,6 +73,8 @@ namespace hal
         infra::Function<void(infra::ConstByteRange data)> dataReceived;
 
         std::atomic<size_t> lastReceivedPosition{};
+
+        UART_HandleTypeDef uartHandle;
     };
 }
 
