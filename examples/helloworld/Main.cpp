@@ -34,8 +34,13 @@ int main()
 #elif defined(STM32G0) || defined(STM32G4)
     static hal::GpioPinStm stLinkUartTxPin{ hal::Port::A, 2 };
     static hal::GpioPinStm stLinkUartRxPin{ hal::Port::A, 3 };
+    // static hal::DmaStm::TransmitStream transmitStream{ dmaStm, hal::DmaChannelId{ 1, 1, DMA_REQUEST_USART2_TX } };
+    // static hal::UartStmDma stLinkUartDma{ transmitStream, 2, stLinkUartTxPin, stLinkUartRxPin };
+    
     static hal::DmaStm::TransmitStream transmitStream{ dmaStm, hal::DmaChannelId{ 1, 1, DMA_REQUEST_USART2_TX } };
-    static hal::UartStmDma stLinkUartDma{ transmitStream, 2, stLinkUartTxPin, stLinkUartRxPin };
+    static hal::DmaStm::ReceiveStream receiveStream{ dmaStm, hal::DmaChannelId{ 1, 2, DMA_REQUEST_USART2_RX } };
+
+    static hal::UartStmDuplexDma::WithRxBuffer<100> uartDuplexDma{ transmitStream, receiveStream, 2, stLinkUartTxPin, stLinkUartRxPin };
 
 #elif defined(STM32WB)
     static hal::GpioPinStm stLinkUartTxPin{ hal::Port::B, 6 };
@@ -51,7 +56,8 @@ int main()
     static hal::UartStmDma stLinkUartDma{ transmitStream, 1, stLinkUartTxPin, stLinkUartRxPin };
 #endif
 
-    static services::StreamWriterOnSerialCommunication::WithStorage<64> streamWriterOnSerialCommunication{ stLinkUartDma };
+    // static services::StreamWriterOnSerialCommunication::WithStorage<64> streamWriterOnSerialCommunication{ stLinkUartDma };
+    static services::StreamWriterOnSerialCommunication::WithStorage<1024> streamWriterOnSerialCommunication{ uartDuplexDma };
 
     static infra::TextOutputStream::WithErrorPolicy textOutputStream{ streamWriterOnSerialCommunication };
     static services::TracerWithDateTime tracerWithDateTime{ textOutputStream };
@@ -62,6 +68,9 @@ int main()
         {
             services::GlobalTracer().Trace() << "Hello World !";
         } };
+
+    uartDuplexDma.ReceiveData([](infra::ConstByteRange data){ services::GlobalTracer().Trace() << "Received: " << infra::ByteRangeAsString(data); });
+
 
     eventInfrastructure.Run();
     __builtin_unreachable();

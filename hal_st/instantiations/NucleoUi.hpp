@@ -4,6 +4,7 @@
 #include "hal_st/stm32fxxx/DmaStm.hpp"
 #include "hal_st/stm32fxxx/GpioStm.hpp"
 #include "hal_st/stm32fxxx/UartStmDma.hpp"
+#include "hal_st/stm32fxxx/UartStmDuplexDma.hpp"
 
 namespace main_
 {
